@@ -175,7 +175,7 @@ const state = {
   user: null,
   cats: [], orgs: [], items: [], updates: [], thanks: [],
   followCounts: {}, myFollows: new Set(),
-  feed: [], searchFilter: 'all', tab: 'feed',
+  feed: [], searchFilter: 'all', tab: 'feed', loaded: false,
 };
 const orgById = id => state.orgs.find(o => o.id === id);
 const catById = id => state.cats.find(c => c.id === id);
@@ -226,6 +226,7 @@ async function loadAll() {
   state.thanks = thanks.data || [];
   state.followCounts = {};
   (counts.data || []).forEach(r => { state.followCounts[r.cat_id] = r.follow_count; });
+  state.loaded = true;
   buildFeed();
 }
 
@@ -328,6 +329,10 @@ ${avatar}
 /* ---------- フィード描画 ---------- */
 function renderFeed() {
 const wrap = document.getElementById('feedList');
+if (!state.loaded) {
+wrap.innerHTML = '<p class="text-center text-sm text-stone-400 py-10">読み込み中…🐾</p>';
+return;
+}
 if (!state.feed.length) {
 wrap.innerHTML = '<div class="card p-8 text-center"><p class="text-4xl mb-2">🐾</p><p class="font-bold mb-1">まだ投稿がありません</p><p class="text-[.82rem] text-stone-500">物資の募集や近況が公開されると、ここに自動で流れます。</p></div>';
 return;
