@@ -133,6 +133,11 @@
     <button id="authSignupBtn" class="font-bold rounded-xl w-full py-2.5 text-sm border border-orange-300 brand bg-white">新規登録はこちら</button>
     <button id="authResetBtn" class="w-full text-center text-[.75rem] text-stone-400 mt-3 underline">パスワードを忘れた方</button>
     <p id="authMsg" class="text-[.78rem] mt-3 text-center hidden"></p>
+    <div id="newPassBox" class="hidden mt-3">
+      <label class="text-xs font-bold text-stone-500">新しいパスワード</label>
+      <input id="newPassword" type="password" autocomplete="new-password" class="w-full border border-orange-200 rounded-xl px-3.5 py-2.5 text-sm mt-1 mb-3 bg-[#FFF9F0] outline-none focus:ring-2 focus:ring-orange-200">
+      <button id="newPassSaveBtn" class="brand-bg text-white font-bold rounded-xl w-full py-2.5 text-sm">新しいパスワードを保存</button>
+    </div>
   </div>
 </div>
 
@@ -282,10 +287,11 @@ if (!cat) return '';
 if (cat.status === 'adopted') return '<p class="text-center text-sm font-bold text-emerald-600 py-1">🎓 この子は新しい家族が決まりました</p>';
 const cls = k => 'exit-btn' + (primary === k? ' primary': '');
 const fosterLabel = cat.status === 'trial'? '🏠 トライアル中': '🏠 里親になる';
+const catLink = RESCUCAT_URL + '?cat=' + cat.id;
 return `<div class="grid grid-cols-3 gap-2">
 <a class="${cls('supplies')}" href="${NEKONOTE_WISHLIST}" target="_blank" rel="noopener">📦 物資で支援</a>
-<a class="${cls('money')}" href="${RESCUCAT_URL}" target="_blank" rel="noopener">💰 支援金</a>
-<a class="${cls('foster')}" href="${RESCUCAT_URL}" target="_blank" rel="noopener">${fosterLabel}</a></div>`;
+<a class="${cls('money')}" href="${catLink}&action=tip" target="_blank" rel="noopener">💰 支援金</a>
+<a class="${cls('foster')}" href="${catLink}" target="_blank" rel="noopener">${fosterLabel}</a></div>`;
 }
 function progressHtml(cat) {
 const target = cat.target_amount || 0, cur = cat.current_amount || 0;
@@ -560,8 +566,16 @@ else authMsg('確認メールを送信しました。メール内のリンクか
 document.getElementById('authResetBtn').addEventListener('click', async () => {
 const email = document.getElementById('authEmail').value.trim();
 if (!email) { authMsg('メールアドレスを入力してください', false); return;}
-const { error} = await sb.auth.resetPasswordForEmail(email, { redirectTo: RESCUCAT_URL});
+const { error} = await sb.auth.resetPasswordForEmail(email, { redirectTo: location.origin + '/'});
 authMsg(error? '送信できませんでした：' + error.message: 'パスワード再設定メールを送信しました',!error);
+});
+document.getElementById('newPassSaveBtn').addEventListener('click', async () => {
+const pw = document.getElementById('newPassword').value;
+if (!pw || pw.length < 6) { authMsg('パスワードは6文字以上で入力してください', false); return;}
+const { error} = await sb.auth.updateUser({ password: pw});
+if (error) { authMsg('保存できませんでした：' + error.message, false); return;}
+document.getElementById('newPassBox').classList.add('hidden');
+closeAuth(); toast('パスワードを変更しました');
 });
 document.getElementById('logoutBtn').addEventListener('click', async () => { await sb.auth.signOut(); toast('ログアウトしました');});
 function syncAuthUi() {
@@ -573,6 +587,7 @@ ua.classList.toggle('flex', loggedIn);
 if (loggedIn) document.getElementById('userEmail').textContent = state.user.email || '';
 }
 sb.auth.onAuthStateChange(async (_event, session) => {
+if (_event === 'PASSWORD_RECOVERY') { openAuth(); document.getElementById('newPassBox').classList.remove('hidden'); authMsg('新しいパスワードを入力してください', true);}
 state.user = session? session.user: null;
 syncAuthUi();
 await loadMyFollows();
