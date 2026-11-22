@@ -1,0 +1,635 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>にゃんスタグラム | 保護ねこ専用のタイムライン</title>
+<meta name="description" content="保護ねこだけが流れるタイムライン。気になった猫は、物資・支援金・里親でそのまま応援できます。">
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  body { background:#FFF9F0; color:#44403c; font-family:"Hiragino Kaku Gothic ProN","Yu Gothic",sans-serif; }
+  .brand { color:#e88b00; }
+  .brand-bg { background:#e88b00; }
+  .card { background:#fff; border:1px solid #fde8cd; border-radius:18px; box-shadow:0 2px 10px rgba(0,0,0,.04); }
+  .chip { font-size:.68rem; padding:.15rem .55rem; border-radius:9999px; font-weight:700; }
+  .tab-btn.active { color:#e88b00; }
+  .exit-btn { display:flex; align-items:center; justify-content:center; gap:.3rem; font-size:.8rem; font-weight:700; border-radius:12px; padding:.55rem .25rem; border:1px solid #fde8cd; background:#FFF9F0; transition:.15s; }
+  .exit-btn:active { transform:scale(.97); }
+  .exit-btn.primary { background:#e88b00; color:#fff; border-color:#e88b00; }
+  .heart-btn.liked { color:#e11d48; }
+  .fade-in { animation:fadeIn .35s ease both; }
+  @keyframes fadeIn { from { opacity:0; transform:translateY(6px);} to { opacity:1; transform:none;} }
+  .modal-bg { background:rgba(68,64,60,.5); }
+  .no-scrollbar::-webkit-scrollbar { display:none; }
+</style>
+</head>
+<body class="min-h-screen">
+
+<!-- ヘッダー -->
+<header class="sticky top-0 z-40 bg-[#FFF9F0]/95 backdrop-blur border-b border-orange-100">
+  <div class="max-w-md mx-auto px-4 h-14 flex items-center justify-between">
+    <a href="./" class="flex items-center gap-2">
+      <span class="text-2xl">🐾</span>
+      <span class="font-black text-lg tracking-tight">にゃんスタグラム</span>
+    </a>
+    <div id="authArea">
+      <button id="loginBtn" class="text-sm font-bold brand border border-orange-300 rounded-full px-4 py-1.5 bg-white">ログイン</button>
+      <span id="userArea" class="hidden items-center gap-2">
+        <span id="userEmail" class="text-xs text-stone-500 max-w-[9rem] truncate"></span>
+        <button id="logoutBtn" class="text-xs font-bold text-stone-500 border border-stone-300 rounded-full px-3 py-1.5 bg-white">ログアウト</button>
+      </span>
+    </div>
+  </div>
+</header>
+
+<main class="max-w-md mx-auto px-3 pb-28">
+
+  <!-- 紹介カード（閉じたら再表示しない） -->
+  <section id="introCard" class="card mt-4 p-4 fade-in hidden">
+    <div class="flex items-start justify-between gap-3">
+      <div>
+        <p class="font-black text-base mb-1">保護ねこだけのタイムラインへようこそ 🐱</p>
+        <p class="text-[.82rem] leading-relaxed text-stone-600">保護団体の「物資の募集」「近況」「届きました！」が自動で流れてきます。気になった猫は、そのまま <strong>📦物資</strong> <strong>💰支援金</strong> <strong>🏠里親</strong> で応援できます。</p>
+      </div>
+      <button id="introClose" class="text-stone-400 text-lg leading-none px-1">×</button>
+    </div>
+  </section>
+
+  <!-- フィード -->
+  <section id="view-feed" class="mt-4 space-y-4">
+    <div id="feedList" class="space-y-4">
+      <p class="text-center text-sm text-stone-400 py-10">読み込み中…🐾</p>
+    </div>
+    <footer class="pt-6 pb-2 text-center space-y-2">
+      <p class="text-[.72rem] text-stone-400">にゃんスタグラムは保護ねこ支援の入口です。<br>物資支援は Nekonote、支援金と里親応募は RescuCat へつながります。</p>
+      <div class="flex justify-center gap-4 text-[.75rem]">
+        <button class="brand font-bold" onclick="openLegal('terms')">利用規約</button>
+        <button class="brand font-bold" onclick="openLegal('privacy')">プライバシーポリシー</button>
+      </div>
+      <p class="text-[.68rem] text-stone-400">運営：保護ねこ支援 RescuCat 運営事務局</p>
+    </footer>
+  </section>
+
+  <!-- さがす -->
+  <section id="view-search" class="mt-4 hidden">
+    <div class="card p-3.5">
+      <input id="searchInput" type="search" placeholder="猫の名前・団体名でさがす" class="w-full border border-orange-200 rounded-xl px-3.5 py-2.5 text-sm bg-[#FFF9F0] outline-none focus:ring-2 focus:ring-orange-200">
+      <div class="flex gap-1.5 mt-3 flex-wrap" id="searchChips">
+        <button data-filter="all" class="chip bg-orange-500 text-white">すべて</button>
+        <button data-filter="recruiting" class="chip bg-orange-100 text-stone-600">里親募集中</button>
+        <button data-filter="trial" class="chip bg-orange-100 text-stone-600">トライアル中</button>
+        <button data-filter="adopted" class="chip bg-orange-100 text-stone-600">卒業</button>
+        <button data-filter="kitten" class="chip bg-orange-100 text-stone-600">子猫</button>
+        <button data-filter="urgent" class="chip bg-orange-100 text-stone-600">SOS・急募</button>
+      </div>
+    </div>
+    <div id="searchGrid" class="grid grid-cols-2 gap-3 mt-4"></div>
+    <p id="searchEmpty" class="hidden text-center text-sm text-stone-400 py-10">見つかりませんでした 🐾</p>
+  </section>
+
+  <!-- 推し（フォロー中） -->
+  <section id="view-follows" class="mt-4 hidden">
+    <div id="followsLoginPrompt" class="card p-6 text-center hidden">
+      <p class="text-4xl mb-2">❤️</p>
+      <p class="font-bold mb-1">推し猫をフォローしよう</p>
+      <p class="text-[.82rem] text-stone-500 leading-relaxed mb-4">ログインすると、気になる猫をフォローして<br>ここに集められます。アカウントは RescuCat などと共通です。</p>
+      <button class="brand-bg text-white font-bold rounded-full px-6 py-2 text-sm" onclick="openAuth()">ログイン / 新規登録</button>
+    </div>
+    <div id="followsGrid" class="grid grid-cols-2 gap-3"></div>
+    <p id="followsEmpty" class="hidden text-center text-sm text-stone-400 py-10">まだフォロー中の猫がいません。<br>フィードで ❤️ を押してみてね。</p>
+  </section>
+
+  <!-- 猫ページ -->
+  <section id="view-cat" class="mt-4 hidden"></section>
+
+  <!-- 団体ページ -->
+  <section id="view-org" class="mt-4 hidden"></section>
+
+</main>
+
+<!-- 下部タブ -->
+<nav class="fixed bottom-0 inset-x-0 z-40 bg-white/95 backdrop-blur border-t border-orange-100">
+  <div class="max-w-md mx-auto grid grid-cols-3 h-16">
+    <button class="tab-btn active flex flex-col items-center justify-center gap-0.5 text-stone-500" data-tab="feed"><span class="text-xl">🏠</span><span class="text-[.65rem] font-bold">フィード</span></button>
+    <button class="tab-btn flex flex-col items-center justify-center gap-0.5 text-stone-500" data-tab="search"><span class="text-xl">🔍</span><span class="text-[.65rem] font-bold">さがす</span></button>
+    <button class="tab-btn flex flex-col items-center justify-center gap-0.5 text-stone-500" data-tab="follows"><span class="text-xl">❤️</span><span class="text-[.65rem] font-bold">推し</span></button>
+  </div>
+</nav>
+
+<!-- ログイン/登録モーダル -->
+<div id="authModal" class="fixed inset-0 z-50 modal-bg hidden items-center justify-center px-4">
+  <div class="bg-white rounded-2xl w-full max-w-sm p-6 fade-in">
+    <div class="flex items-center justify-between mb-1">
+      <p class="font-black text-lg">🐾 ログイン</p>
+      <button class="text-stone-400 text-xl" onclick="closeAuth()">×</button>
+    </div>
+    <p class="text-[.78rem] text-stone-500 mb-4">RescuCat / Nekonote と同じアカウントが使えます。</p>
+    <label class="text-xs font-bold text-stone-500">メールアドレス</label>
+    <input id="authEmail" type="email" autocomplete="email" class="w-full border border-orange-200 rounded-xl px-3.5 py-2.5 text-sm mt-1 mb-3 bg-[#FFF9F0] outline-none focus:ring-2 focus:ring-orange-200">
+    <label class="text-xs font-bold text-stone-500">パスワード</label>
+    <input id="authPassword" type="password" autocomplete="current-password" class="w-full border border-orange-200 rounded-xl px-3.5 py-2.5 text-sm mt-1 mb-4 bg-[#FFF9F0] outline-none focus:ring-2 focus:ring-orange-200">
+    <button id="authLoginBtn" class="brand-bg text-white font-bold rounded-xl w-full py-2.5 text-sm mb-2">ログイン</button>
+    <button id="authSignupBtn" class="font-bold rounded-xl w-full py-2.5 text-sm border border-orange-300 brand bg-white">新規登録はこちら</button>
+    <button id="authResetBtn" class="w-full text-center text-[.75rem] text-stone-400 mt-3 underline">パスワードを忘れた方</button>
+    <p id="authMsg" class="text-[.78rem] mt-3 text-center hidden"></p>
+  </div>
+</div>
+
+<!-- 法務モーダル -->
+<div id="legalModal" class="fixed inset-0 z-50 modal-bg hidden items-end sm:items-center justify-center">
+  <div class="bg-white w-full max-w-md max-h-[85vh] overflow-y-auto rounded-t-2xl sm:rounded-2xl p-6 fade-in">
+    <div class="flex items-center justify-between mb-3">
+      <p id="legalTitle" class="font-black"></p>
+      <button class="text-stone-400 text-xl" onclick="closeLegal()">×</button>
+    </div>
+    <div id="legalBody" class="text-[.82rem] leading-[1.9] space-y-3"></div>
+  </div>
+</div>
+
+<!-- トースト -->
+<div id="toast" class="fixed left-1/2 -translate-x-1/2 bottom-20 z-50 bg-stone-800 text-white text-sm font-bold rounded-full px-5 py-2.5 shadow-lg hidden"></div>
+
+<script>
+const SUPABASE_URL = 'https://fknneasutspaonhvmsae.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_bXjpXwx8EY2PBn3E6FqT8A_3s18sjFJ';
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const NEKONOTE_WISHLIST = 'https://nekonote-support.pages.dev/wishlist';
+const NEKONOTE_THANKS = 'https://nekonote-support.pages.dev/thanks';
+const RESCUCAT_URL = 'https://rescue-cat-app.pages.dev/';
+
+const state = {
+  user: null,
+  cats: [], orgs: [], items: [], updates: [], thanks: [],
+  followCounts: {}, myFollows: new Set(),
+  feed: [], searchFilter: 'all', tab: 'feed',
+};
+const orgById = id => state.orgs.find(o => o.id === id);
+const catById = id => state.cats.find(c => c.id === id);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const yen = n => '¥' + Number(n || 0).toLocaleString('ja-JP');
+
+function timeAgo(iso) {
+  const t = new Date(iso).getTime(), now = Date.now();
+  const m = Math.floor((now - t) / 60000);
+  if (m < 1) return 'たった今';
+  if (m < 60) return m + '分前';
+  const h = Math.floor(m / 60);
+  if (h < 24) return h + '時間前';
+  const d = Math.floor(h / 24);
+  if (d < 30) return d + '日前';
+  return new Date(iso).toLocaleDateString('ja-JP', { year: 'numeric', month: 'short', day: 'numeric' });
+}
+function jstDateKey(iso) {
+  return new Date(iso).toLocaleDateString('ja-JP', { timeZone: 'Asia/Tokyo' });
+}
+function statusBadge(cat) {
+  if (!cat) return '';
+  if (cat.status === 'adopted') return '<span class="chip bg-emerald-100 text-emerald-700">🎓 卒業</span>';
+  if (cat.status === 'trial') return '<span class="chip bg-sky-100 text-sky-700">🏠 トライアル中</span>';
+  return '<span class="chip bg-orange-100 text-orange-700">里親募集中</span>';
+}
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.remove('hidden');
+  setTimeout(() => el.classList.add('hidden'), 2600);
+}
+
+/* ---------- データ読み込み ---------- */
+async function loadAll() {
+  const [cats, orgs, items, updates, thanks, counts] = await Promise.all([
+    sb.from('cats').select('id, organization_id, name, species, sex, age_text, color_pattern, message, personality, medical_notes, next_medical_date, image_url, video_url, is_kitten, is_urgent, status, target_amount, current_amount, created_at').eq('is_public', true).order('created_at', { ascending: false }),
+    sb.from('organizations').select('id, name, slug, delivery_type, amazon_wishlist_url').order('name'),
+    sb.from('wishlist_items').select('id, title, description, target_quantity, current_quantity, is_urgent, image_url, cat_image_url, cat_id, category, organization_id, created_at').eq('status', 'active').order('created_at', { ascending: false }),
+    sb.from('cat_updates').select('id, cat_id, message, image_url, video_url, created_at').order('created_at', { ascending: false }).limit(60),
+    sb.from('activity_logs').select('id, title, details, content, image_url, volunteer_name, cat_id, organization_id, created_at').eq('type', 'donation').eq('status', 'approved').order('created_at', { ascending: false }).limit(60),
+    sb.from('cat_follow_counts').select('cat_id, follow_count'),
+  ]);
+  state.cats = cats.data || [];
+  state.orgs = orgs.data || [];
+  state.items = items.data || [];
+  state.updates = updates.data || [];
+  state.thanks = thanks.data || [];
+  state.followCounts = {};
+  (counts.data || []).forEach(r => { state.followCounts[r.cat_id] = r.follow_count; });
+  buildFeed();
+}
+
+async function loadMyFollows() {
+  state.myFollows = new Set();
+  if (!state.user) return;
+  const { data } = await sb.from('follows').select('cat_id').eq('supporter_id', state.user.id);
+  (data || []).forEach(r => state.myFollows.add(r.cat_id));
+}
+
+/* ---------- フィード組み立て ---------- */
+function buildFeed() {
+  const posts = [];
+  // 支援金・里親の募集開始（公開＆募集中になった猫）
+  state.cats.filter(c => c.status === 'recruiting').forEach(cat => {
+    posts.push({ type: 'recruit', time: cat.created_at, cat, org: orgById(cat.organization_id) });
+  });
+  // 物資の公開（同じ猫・同じ日は1投稿に束ねる。猫なしは団体単位）
+  const groups = new Map();
+  state.items.forEach(item => {
+    const key = (item.cat_id || 'org') + '|' + item.organization_id + '|' + jstDateKey(item.created_at);
+    if (!groups.has(key)) groups.set(key, { type: 'supplies', time: item.created_at, items: [], cat: item.cat_id ? catById(item.cat_id) : null, org: orgById(item.organization_id) });
+    const g = groups.get(key);
+    g.items.push(item);
+    if (item.created_at > g.time) g.time = item.created_at;
+  });
+  groups.forEach(g => posts.push(g));
+  // 近況（ステータス変化の自動投稿を含む）
+  state.updates.forEach(u => {
+    const cat = catById(u.cat_id);
+    if (cat) posts.push({ type: 'update', time: u.created_at, update: u, cat, org: orgById(cat.organization_id) });
+  });
+  // サンクス報告
+  state.thanks.forEach(t => {
+    posts.push({ type: 'thanks', time: t.created_at, log: t, cat: t.cat_id ? catById(t.cat_id) : null, org: orgById(t.organization_id) });
+  });
+  posts.sort((a, b) => new Date(b.time) - new Date(a.time));
+  state.feed = posts;
+}
+
+/* ---------- 共通パーツ ---------- */
+function catUrl(cat) { return './?cat=' + cat.id;}
+function orgUrl(org) { return './?org=' + org.id;}
+
+function followBtnHtml(cat) {
+const liked = state.myFollows.has(cat.id);
+const count = state.followCounts[cat.id] || 0;
+return `<button class="heart-btn ${liked? 'liked': 'text-stone-400'} flex items-center gap-1 text-sm font-bold" onclick="toggleFollow('${cat.id}')">
+<span class="text-xl leading-none">${liked? '❤️': '🤍'}</span><span>${count > 0? count: ''}</span></button>`;
+}
+function shareBtnsHtml(cat, org) {
+const url = location.origin + location.pathname + '?cat=' + cat.id;
+const text = `${cat.name}（${org? org.name: '保護団体'}）を応援しよう！🐾`;
+const x = 'https://twitter.com/intent/tweet?text=' + encodeURIComponent(text) + '&url=' + encodeURIComponent(url);
+const line = 'https://social-plugins.line.me/lineit/share?url=' + encodeURIComponent(url);
+return `<span class="flex items-center gap-2 ml-auto">
+<a href="${x}" target="_blank" rel="noopener" class="text-[.72rem] font-bold border border-stone-300 rounded-full px-2.5 py-1 bg-white">𝕏でシェア</a>
+<a href="${line}" target="_blank" rel="noopener" class="text-[.72rem] font-bold border border-stone-300 rounded-full px-2.5 py-1 bg-white text-emerald-600">LINE</a>
+<button class="text-[.72rem] font-bold border border-stone-300 rounded-full px-2.5 py-1 bg-white" onclick="copyLink('${url}')">リンク</button></span>`;
+}
+async function copyLink(url) {
+try { await navigator.clipboard.writeText(url); toast('リンクをコピーしました');}
+catch { toast('コピーできませんでした');}
+}
+function exitsHtml(cat, primary) {
+if (!cat) return '';
+if (cat.status === 'adopted') return '<p class="text-center text-sm font-bold text-emerald-600 py-1">🎓 この子は新しい家族が決まりました</p>';
+const cls = k => 'exit-btn' + (primary === k? ' primary': '');
+const fosterLabel = cat.status === 'trial'? '🏠 トライアル中': '🏠 里親になる';
+return `<div class="grid grid-cols-3 gap-2">
+<a class="${cls('supplies')}" href="${NEKONOTE_WISHLIST}" target="_blank" rel="noopener">📦 物資で支援</a>
+<a class="${cls('money')}" href="${RESCUCAT_URL}" target="_blank" rel="noopener">💰 支援金</a>
+<a class="${cls('foster')}" href="${RESCUCAT_URL}" target="_blank" rel="noopener">${fosterLabel}</a></div>`;
+}
+function progressHtml(cat) {
+const target = cat.target_amount || 0, cur = cat.current_amount || 0;
+if (!target) return '';
+const pct = Math.min(100, Math.round(cur / target * 100));
+return `<div class="mt-2">
+<div class="flex justify-between text-[.72rem] text-stone-500 font-bold"><span>支援金 ${yen(cur)} / ${yen(target)}</span><span>${pct}%</span></div>
+<div class="h-2 bg-orange-100 rounded-full mt-1 overflow-hidden"><div class="h-full brand-bg rounded-full" style="width:${pct}%"></div></div></div>`;
+}
+function postHeader(cat, org, time, badge) {
+const avatar = cat && cat.image_url
+? `<img src="${esc(cat.image_url)}" alt="" class="w-10 h-10 rounded-full object-cover border border-orange-100" loading="lazy">`
+: '<span class="w-10 h-10 rounded-full bg-orange-100 flex items-center justify-center text-lg">🐱</span>';
+const title = cat
+? `<a href="${catUrl(cat)}" class="font-black hover:underline">${esc(cat.name)}</a>`
+: `<a href="${org? orgUrl(org): '#'}" class="font-black hover:underline">${esc(org? org.name: '保護団体')}</a>`;
+const sub = cat && org? `<a href="${orgUrl(org)}" class="hover:underline">${esc(org.name)}</a> ・ ${timeAgo(time)}`: timeAgo(time);
+return `<div class="flex items-center gap-2.5 px-4 pt-3.5">
+${avatar}
+<div class="min-w-0 flex-1">
+<p class="text-[.9rem] leading-tight truncate">${title}</p>
+<p class="text-[.72rem] text-stone-400 leading-tight truncate">${sub}</p>
+</div>${badge || ''}</div>`;
+}
+
+/* ---------- フィード描画 ---------- */
+function renderFeed() {
+const wrap = document.getElementById('feedList');
+if (!state.feed.length) {
+wrap.innerHTML = '<div class="card p-8 text-center"><p class="text-4xl mb-2">🐾</p><p class="font-bold mb-1">まだ投稿がありません</p><p class="text-[.82rem] text-stone-500">物資の募集や近況が公開されると、ここに自動で流れます。</p></div>';
+return;
+}
+wrap.innerHTML = state.feed.map(postCardHtml).join('');
+}
+function postCardHtml(p) {
+if (p.type === 'recruit') {
+const cat = p.cat;
+return `<article class="card overflow-hidden fade-in">
+${postHeader(cat, p.org, p.time, '<span class="chip bg-rose-100 text-rose-600">🆕 募集スタート</span>')}
+${cat.image_url? `<a href="${catUrl(cat)}"><img src="${esc(cat.image_url)}" alt="${esc(cat.name)}" class="w-full aspect-[4/3] object-cover mt-3" loading="lazy"></a>`: ''}
+<div class="px-4 py-3.5">
+<div class="flex items-center gap-2 mb-1.5">${statusBadge(cat)}${cat.is_kitten? '<span class="chip bg-amber-100 text-amber-700">子猫</span>': ''}${cat.is_urgent? '<span class="chip bg-red-100 text-red-600">🆘 SOS</span>': ''}</div>
+<p class="text-[.88rem] leading-relaxed">${esc(cat.message || cat.personality || '新しい仲間が加わりました！応援よろしくお願いします。')}</p>
+${progressHtml(cat)}
+<div class="flex items-center gap-3 mt-3">${followBtnHtml(cat)}${shareBtnsHtml(cat, p.org)}</div>
+<div class="mt-3">${exitsHtml(cat, 'money')}</div>
+</div></article>`;
+}
+if (p.type === 'supplies') {
+const first = p.items[0];
+const img = first.image_url || first.cat_image_url || (p.cat && p.cat.image_url);
+const rows = p.items.map(i => {
+const pct = i.target_quantity? Math.min(100, Math.round((i.current_quantity || 0) / i.target_quantity * 100)): 0;
+return `<div class="py-1.5">
+<p class="text-[.86rem] font-bold">${esc(i.title)} ${i.is_urgent? '<span class="chip bg-red-100 text-red-600 ml-1">🆘 SOS</span>': ''}</p>
+<div class="flex items-center gap-2 mt-1">
+<div class="h-1.5 flex-1 bg-orange-100 rounded-full overflow-hidden"><div class="h-full brand-bg" style="width:${pct}%"></div></div>
+<span class="text-[.7rem] text-stone-500 font-bold">${i.current_quantity || 0}/${i.target_quantity || 0}個</span>
+</div></div>`;
+}).join('');
+return `<article class="card overflow-hidden fade-in">
+${postHeader(p.cat, p.org, p.time, '<span class="chip bg-amber-100 text-amber-700">📦 物資の募集</span>')}
+${img? `<img src="${esc(img)}" alt="" class="w-full aspect-[4/3] object-cover mt-3" loading="lazy">`: ''}
+<div class="px-4 py-3.5">
+${rows}
+${first.description? `<p class="text-[.82rem] text-stone-500 leading-relaxed mt-1">${esc(first.description)}</p>`: ''}
+${p.cat? `<div class="flex items-center gap-3 mt-3">${followBtnHtml(p.cat)}${shareBtnsHtml(p.cat, p.org)}</div>`: ''}
+<div class="mt-3"><a class="exit-btn primary w-full" href="${NEKONOTE_WISHLIST}" target="_blank" rel="noopener">📦 Nekonoteで物資を送る</a></div>
+</div></article>`;
+}
+if (p.type === 'update') {
+const cat = p.cat, u = p.update;
+const img = u.image_url || cat.image_url;
+return `<article class="card overflow-hidden fade-in">
+${postHeader(cat, p.org, p.time, '<span class="chip bg-sky-100 text-sky-700">📝 近況</span>')}
+${img? `<a href="${catUrl(cat)}"><img src="${esc(img)}" alt="" class="w-full aspect-[4/3] object-cover mt-3" loading="lazy"></a>`: ''}
+<div class="px-4 py-3.5">
+<p class="text-[.88rem] leading-relaxed whitespace-pre-wrap">${esc(u.message || '')}</p>
+<div class="flex items-center gap-3 mt-3">${followBtnHtml(cat)}${shareBtnsHtml(cat, p.org)}</div>
+<div class="mt-3">${exitsHtml(cat, null)}</div>
+</div></article>`;
+}
+// thanks
+const t = p.log;
+return `<article class="card overflow-hidden fade-in">
+${postHeader(p.cat, p.org, p.time, '<span class="chip bg-pink-100 text-pink-600">💌 届きました</span>')}
+${t.image_url? `<img src="${esc(t.image_url)}" alt="" class="w-full aspect-[4/3] object-cover mt-3" loading="lazy">`: ''}
+<div class="px-4 py-3.5">
+<p class="text-[.88rem] font-bold">${esc((t.title || '物資支援').replace('', ''))}</p>
+${t.details? `<p class="text-[.86rem] leading-relaxed mt-1">「${esc(t.details)}」</p>`: ''}
+<p class="text-[.74rem] text-stone-400 mt-1.5">支援者：${esc(t.volunteer_name || '匿名')} さん ／ ${esc(p.org? p.org.name: '')}</p>
+${p.cat? `<div class="flex items-center gap-3 mt-3">${followBtnHtml(p.cat)}${shareBtnsHtml(p.cat, p.org)}</div>
+<div class="mt-3">${exitsHtml(p.cat, 'supplies')}</div>`:
+`<div class="mt-3"><a class="exit-btn w-full" href="${NEKONOTE_THANKS}" target="_blank" rel="noopener">💌 サンクスボードを見る</a></div>`}
+</div></article>`;
+}
+
+/* ---------- 猫ページ ---------- */
+function renderCatPage(cat) {
+const org = orgById(cat.organization_id);
+const myItems = state.items.filter(i => i.cat_id === cat.id);
+const myUpdates = state.updates.filter(u => u.cat_id === cat.id);
+const myThanks = state.thanks.filter(t => t.cat_id === cat.id);
+const info = [
+['性別', cat.sex], ['年齢', cat.age_text], ['毛色・柄', cat.color_pattern],
+['性格', cat.personality], ['医療メモ', cat.medical_notes],
+['次回通院', cat.next_medical_date],
+].filter(([, v]) => v);
+document.getElementById('view-cat').innerHTML = `
+<button class="text-sm font-bold brand mb-3" onclick="goHome()">← フィードに戻る</button>
+<article class="card overflow-hidden fade-in">
+${cat.image_url? `<img src="${esc(cat.image_url)}" alt="${esc(cat.name)}" class="w-full aspect-square object-cover">`: '<div class="w-full aspect-square bg-orange-50 flex items-center justify-center text-7xl">🐱</div>'}
+<div class="p-4">
+<div class="flex items-center gap-2 flex-wrap">
+<h1 class="text-xl font-black">${esc(cat.name)}</h1>${statusBadge(cat)}
+${cat.is_kitten? '<span class="chip bg-amber-100 text-amber-700">子猫</span>': ''}${cat.is_urgent? '<span class="chip bg-red-100 text-red-600">🆘 SOS</span>': ''}
+</div>
+${org? `<p class="text-[.8rem] text-stone-500 mt-1">保護団体：<a class="brand font-bold hover:underline" href="${orgUrl(org)}">${esc(org.name)}</a></p>`: ''}
+<div class="flex items-center gap-3 mt-3">${followBtnHtml(cat)}<span class="text-[.78rem] text-stone-400">人が推しています</span>${shareBtnsHtml(cat, org)}</div>
+${cat.message? `<p class="text-[.9rem] leading-relaxed mt-3 whitespace-pre-wrap">${esc(cat.message)}</p>`: ''}
+${progressHtml(cat)}
+${info.length? `<div class="mt-4 bg-[#FFF9F0] border border-orange-100 rounded-xl p-3.5 space-y-1.5">
+${info.map(([k, v]) => `<p class="text-[.82rem]"><span class="font-bold text-stone-500 mr-2">${k}</span>${esc(v)}</p>`).join('')}</div>`: ''}
+</div>
+<div class="px-4 pb-4">${exitsHtml(cat, 'money')}</div>
+</article>
+${myItems.length? `<div class="card mt-4 p-4"><p class="font-black mb-2">📦 この子への物資募集</p>
+${myItems.map(i => `<p class="text-[.86rem] py-1 border-b border-orange-50 last:border-0">${esc(i.title)} <span class="text-stone-400 text-[.76rem]">${i.current_quantity || 0}/${i.target_quantity || 0}個</span></p>`).join('')}
+<a class="exit-btn primary w-full mt-3" href="${NEKONOTE_WISHLIST}" target="_blank" rel="noopener">📦 Nekonoteで物資を送る</a></div>`: ''}
+${myUpdates.length || myThanks.length? `<div class="mt-4 space-y-4">
+${myUpdates.map(u => postCardHtml({ type: 'update', time: u.created_at, update: u, cat, org})).join('')}
+${myThanks.map(t => postCardHtml({ type: 'thanks', time: t.created_at, log: t, cat, org})).join('')}</div>`: ''}`;
+showView('cat');
+}
+
+/* ---------- 団体ページ ---------- */
+function renderOrgPage(org) {
+const cats = state.cats.filter(c => c.organization_id === org.id);
+const items = state.items.filter(i => i.organization_id === org.id);
+document.getElementById('view-org').innerHTML = `
+<button class="text-sm font-bold brand mb-3" onclick="goHome()">← フィードに戻る</button>
+<article class="card p-5 fade-in">
+<div class="flex items-center gap-3">
+<span class="w-14 h-14 rounded-full bg-orange-100 flex items-center justify-center text-3xl">🏠</span>
+<div><h1 class="text-lg font-black">${esc(org.name)}</h1>
+<p class="text-[.76rem] text-stone-400">保護団体</p></div>
+</div>
+<div class="grid grid-cols-2 gap-2 mt-4">
+<a class="exit-btn" href="${NEKONOTE_WISHLIST}" target="_blank" rel="noopener">📦 物資で支援</a>
+<a class="exit-btn" href="${RESCUCAT_URL}" target="_blank" rel="noopener">💰 支援金・里親</a>
+</div>
+${org.delivery_type === 'wishlist' && org.amazon_wishlist_url? `<a class="exit-btn w-full mt-2" href="${esc(org.amazon_wishlist_url)}" target="_blank" rel="noopener">🎁 Amazonほしい物リスト</a>`: ''}
+</article>
+<p class="font-black mt-5 mb-2">🐱 この団体の猫たち（${cats.length}）</p>
+<div class="grid grid-cols-2 gap-3">${cats.map(catCardHtml).join('') || '<p class="text-sm text-stone-400 col-span-2">公開中の猫はまだいません。</p>'}</div>
+${items.length? `<p class="font-black mt-5 mb-2">📦 募集中の物資</p>
+<div class="card p-4">${items.map(i => `<p class="text-[.86rem] py-1 border-b border-orange-50 last:border-0">${esc(i.title)} <span class="text-stone-400 text-[.76rem]">${i.current_quantity || 0}/${i.target_quantity || 0}個</span></p>`).join('')}</div>`: ''}`;
+showView('org');
+}
+
+/* ---------- さがす / 推し ---------- */
+function catCardHtml(cat) {
+const org = orgById(cat.organization_id);
+return `<a href="${catUrl(cat)}" class="card overflow-hidden block fade-in">
+${cat.image_url? `<img src="${esc(cat.image_url)}" alt="${esc(cat.name)}" class="w-full aspect-square object-cover" loading="lazy">`: '<div class="w-full aspect-square bg-orange-50 flex items-center justify-center text-5xl">🐱</div>'}
+<div class="p-2.5">
+<p class="font-black text-[.9rem] truncate">${esc(cat.name)}</p>
+<p class="text-[.7rem] text-stone-400 truncate">${esc(org? org.name: '')}</p>
+<div class="flex items-center gap-1.5 mt-1.5">${statusBadge(cat)}<span class="text-[.7rem] text-rose-500 font-bold ml-auto">${(state.followCounts[cat.id] || 0) > 0? '❤️ ' + state.followCounts[cat.id]: ''}</span></div>
+</div></a>`;
+}
+function renderSearch() {
+const q = (document.getElementById('searchInput').value || '').trim();
+const f = state.searchFilter;
+const list = state.cats.filter(cat => {
+if (f === 'recruiting' && cat.status!== 'recruiting') return false;
+if (f === 'trial' && cat.status!== 'trial') return false;
+if (f === 'adopted' && cat.status!== 'adopted') return false;
+if (f === 'kitten' &&!cat.is_kitten) return false;
+if (f === 'urgent' &&!cat.is_urgent) return false;
+if (q) {
+const org = orgById(cat.organization_id);
+return cat.name.includes(q) || (org && org.name.includes(q));
+}
+return true;
+});
+document.getElementById('searchGrid').innerHTML = list.map(catCardHtml).join('');
+document.getElementById('searchEmpty').classList.toggle('hidden', list.length > 0);
+}
+function renderFollows() {
+const loggedIn =!!state.user;
+document.getElementById('followsLoginPrompt').classList.toggle('hidden', loggedIn);
+const list = loggedIn? state.cats.filter(c => state.myFollows.has(c.id)): [];
+document.getElementById('followsGrid').innerHTML = list.map(catCardHtml).join('');
+document.getElementById('followsEmpty').classList.toggle('hidden',!loggedIn || list.length > 0);
+}
+
+/* ---------- 画面遷移 ---------- */
+function showView(name) {
+['feed', 'search', 'follows', 'cat', 'org'].forEach(v => {
+document.getElementById('view-' + v).classList.toggle('hidden', v!== name);
+});
+document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
+window.scrollTo({ top: 0});
+}
+function switchTab(tab) {
+state.tab = tab;
+if (tab === 'search') renderSearch();
+if (tab === 'follows') renderFollows();
+showView(tab);
+}
+function goHome() { history.pushState({}, '', './'); switchTab('feed');}
+document.querySelectorAll('.tab-btn').forEach(b => b.addEventListener('click', () => { history.pushState({}, '', './'); switchTab(b.dataset.tab);}));
+document.getElementById('searchInput').addEventListener('input', renderSearch);
+document.querySelectorAll('#searchChips button').forEach(b => b.addEventListener('click', () => {
+state.searchFilter = b.dataset.filter;
+document.querySelectorAll('#searchChips button').forEach(x => { x.className = 'chip ' + (x === b? 'bg-orange-500 text-white': 'bg-orange-100 text-stone-600');});
+renderSearch();
+}));
+
+/* ---------- フォロー ---------- */
+async function toggleFollow(catId) {
+if (!state.user) { openAuth(); return;}
+const cat = catById(catId);
+if (state.myFollows.has(catId)) {
+const { error} = await sb.from('follows').delete().eq('supporter_id', state.user.id).eq('cat_id', catId);
+if (error) { toast('取り消しに失敗しました'); return;}
+state.myFollows.delete(catId);
+state.followCounts[catId] = Math.max(0, (state.followCounts[catId] || 1) - 1);
+toast((cat? cat.name: '猫') + ' のフォローを外しました');
+} else {
+const { error} = await sb.from('follows').insert([{ supporter_id: state.user.id, cat_id: catId}]);
+if (error) { toast('フォローに失敗しました'); return;}
+state.myFollows.add(catId);
+state.followCounts[catId] = (state.followCounts[catId] || 0) + 1;
+toast((cat? cat.name: '猫') + ' をフォローしました ❤️');
+}
+rerenderCurrent();
+}
+function rerenderCurrent() {
+const params = new URLSearchParams(location.search);
+if (params.get('cat')) { const c = catById(params.get('cat')); if (c) { renderCatPage(c); return;}}
+if (state.tab === 'search') renderSearch();
+else if (state.tab === 'follows') renderFollows();
+else renderFeed();
+}
+
+/* ---------- 認証 ---------- */
+function openAuth() { const m = document.getElementById('authModal'); m.classList.remove('hidden'); m.classList.add('flex');}
+function closeAuth() { const m = document.getElementById('authModal'); m.classList.add('hidden'); m.classList.remove('flex');}
+document.getElementById('loginBtn').addEventListener('click', openAuth);
+function authMsg(text, ok) {
+const el = document.getElementById('authMsg');
+el.textContent = text;
+el.className = 'text-[.78rem] mt-3 text-center ' + (ok? 'text-emerald-600': 'text-rose-500');
+}
+document.getElementById('authLoginBtn').addEventListener('click', async () => {
+const email = document.getElementById('authEmail').value.trim();
+const password = document.getElementById('authPassword').value;
+const { error} = await sb.auth.signInWithPassword({ email, password});
+if (error) { authMsg('ログインできませんでした：' + error.message, false); return;}
+closeAuth(); toast('ログインしました');
+});
+document.getElementById('authSignupBtn').addEventListener('click', async () => {
+const email = document.getElementById('authEmail').value.trim();
+const password = document.getElementById('authPassword').value;
+const { data, error} = await sb.auth.signUp({ email, password, options: { emailRedirectTo: location.href}});
+if (error) { authMsg('登録できませんでした：' + error.message, false); return;}
+if (data.session) { closeAuth(); toast('登録しました！');}
+else authMsg('確認メールを送信しました。メール内のリンクから登録を完了してください。', true);
+});
+document.getElementById('authResetBtn').addEventListener('click', async () => {
+const email = document.getElementById('authEmail').value.trim();
+if (!email) { authMsg('メールアドレスを入力してください', false); return;}
+const { error} = await sb.auth.resetPasswordForEmail(email, { redirectTo: RESCUCAT_URL});
+authMsg(error? '送信できませんでした：' + error.message: 'パスワード再設定メールを送信しました',!error);
+});
+document.getElementById('logoutBtn').addEventListener('click', async () => { await sb.auth.signOut(); toast('ログアウトしました');});
+function syncAuthUi() {
+const loggedIn =!!state.user;
+document.getElementById('loginBtn').classList.toggle('hidden', loggedIn);
+const ua = document.getElementById('userArea');
+ua.classList.toggle('hidden',!loggedIn);
+ua.classList.toggle('flex', loggedIn);
+if (loggedIn) document.getElementById('userEmail').textContent = state.user.email || '';
+}
+sb.auth.onAuthStateChange(async (_event, session) => {
+state.user = session? session.user: null;
+syncAuthUi();
+await loadMyFollows();
+rerenderCurrent();
+});
+
+/* ---------- 法務 ---------- */
+const LEGAL = {
+terms: { title: '利用規約', body: `
+<p><strong>第1条（サービス内容）</strong><br>にゃんスタグラムは、保護動物団体の活動（物資の募集、近況報告、支援へのお礼など）を集約して表示し、支援を希望する方と団体・保護猫をつなぐ情報提供サービスです。掲載内容は、連携サービス（RescuCat / RescueOps / Nekonote）に登録された情報をもとに自動で表示されます。運営は「保護ねこ支援 RescuCat 運営事務局」（以下「当運営」）が行います。</p>
+<p><strong>第2条（当運営の立場）</strong><br>物資の寄付・支援金の支払い・里親応募は、支援者と団体の間（または連携サービス上）で直接行われるものであり、当運営はその当事者となりません。掲載情報の正確性は登録団体の責任とし、個別の取引・譲渡に関するトラブルについて当運営は責任を負いません。</p>
+<p><strong>第3条（アカウントとフォロー）</strong><br>フォロー機能の利用にはアカウント登録が必要です。アカウントは連携サービスと共通です。利用者は、自己の責任でアカウント情報を管理するものとします。</p>
+<p><strong>第4条（禁止事項）</strong><br>虚偽情報の登録、営利・転売目的での利用、他者の権利の侵害、掲載された連絡先・住所の目的外利用、その他当運営が不適切と判断する行為を禁止します。</p>
+<p><strong>第5条（アフィリエイトについて）</strong><br>本サービスおよび連携先のリンクには、アフィリエイトリンクが含まれる場合があります。その場合でも、リンク先での購入価格に追加の負担が生じることはありません。</p>
+<p><strong>第6条（免責・準拠法）</strong><br>当運営は、本サービスの利用により生じた損害について、当運営の故意または重過失による場合を除き、責任を負いません。本規約は日本法に準拠します。</p>`},
+privacy: { title: 'プライバシーポリシー', body: `
+<p>保護ねこ支援 RescuCat 運営事務局（以下「当運営」）は、当運営が提供する RescuCat / RescueOps / Nekonote / にゃんスタグラム（以下「本サービス群」）における利用者の個人情報の取り扱いについて、以下のとおり定めます。</p>
+<p><strong>1. 取得する情報</strong><br>アカウント情報（メールアドレス等）、団体情報（団体名・担当者名・連絡先・送付先住所）、ボランティア名簿情報（団体が登録する氏名・連絡先等）、応募・問い合わせ情報（氏名・メールアドレス・電話番号・住所・応募内容）、支援に関する情報（支援金額・対象の猫・決済の完了状況。クレジットカード番号等の決済情報は決済事業者 Stripe が処理し、当運営は保持しません）、アクセスログ等を取得します。</p>
+<p><strong>2. 利用目的</strong><br>本サービス群の提供、本人確認、連絡、里親応募・問い合わせの対象団体への取り次ぎ、支援金の集計および団体への払い出し、お問い合わせ対応、不正利用の防止、サービス改善のために利用します。</p>
+<p><strong>3. 第三者への提供</strong><br>里親応募・問い合わせ情報は、応募先の保護団体に提供します。物資の送付先住所は、支援を申し出た支援者に限り、送付手続きのために表示します。法令に基づく場合を除き、上記以外の第三者提供は本人の同意なく行いません。</p>
+<p><strong>4. 委託先</strong><br>本サービス群は、データ保管に Supabase、配信に Cloudflare / Netlify、決済に Stripe を利用しており、必要な範囲で情報の取り扱いを委託しています。</p>
+<p><strong>5. 安全管理</strong><br>取得した個人情報は、アクセス制御等の措置により適切に管理します。各団体が登録した名簿情報の内容の正確性・最新性は、登録した団体の責任で管理されるものとします。</p>
+<p><strong>6. 開示・訂正・削除の請求</strong><br>本人からの請求には、本人確認のうえ合理的な期間内に対応します。窓口は第8項の連絡先とします。</p>
+<p><strong>7. 改定</strong><br>本ポリシーを改定する場合は、本サービス群上で告知します。</p>
+<p><strong>8. お問い合わせ窓口</strong><br>保護ねこ支援 RescuCat 運営事務局<br>メール：ken.c.1173.surf@gmail.com</p>`},
+};
+function openLegal(kind) {
+document.getElementById('legalTitle').textContent = LEGAL[kind].title;
+document.getElementById('legalBody').innerHTML = LEGAL[kind].body;
+document.getElementById('legalModal').classList.remove('hidden');
+}
+function closeLegal() { document.getElementById('legalModal').classList.add('hidden');}
+
+/* ---------- 初期化 ---------- */
+(async function init() {
+if (!localStorage.getItem('nyan_intro_dismissed')) document.getElementById('introCard').classList.remove('hidden');
+document.getElementById('introClose').addEventListener('click', () => {
+document.getElementById('introCard').classList.add('hidden');
+localStorage.setItem('nyan_intro_dismissed', '1');
+});
+const { data: { session}} = await sb.auth.getSession();
+state.user = session? session.user: null;
+syncAuthUi();
+await loadAll();
+await loadMyFollows();
+renderFeed();
+const params = new URLSearchParams(location.search);
+if (params.get('cat')) {
+const cat = catById(params.get('cat'));
+if (cat) { renderCatPage(cat); return;}
+}
+if (params.get('org')) {
+const org = orgById(params.get('org'));
+if (org) { renderOrgPage(org); return;}
+}
+showView('feed');
+})();
+</script>
+</body>
+</html>
