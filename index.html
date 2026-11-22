@@ -160,6 +160,7 @@ const SUPABASE_URL = 'https://fknneasutspaonhvmsae.supabase.co';
 const SUPABASE_ANON_KEY = 'sb_publishable_bXjpXwx8EY2PBn3E6FqT8A_3s18sjFJ';
 const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 const NEKONOTE_WISHLIST = 'https://nekonote-support.pages.dev/wishlist';
+const wishlistFor = (catId, orgId) => NEKONOTE_WISHLIST + (catId ? '?cat=' + catId : (orgId ? '?org=' + orgId : ''));
 const NEKONOTE_THANKS = 'https://nekonote-support.pages.dev/thanks';
 const RESCUCAT_URL = 'https://rescue-cat-app.pages.dev/';
 
@@ -289,8 +290,8 @@ const cls = k => 'exit-btn' + (primary === k? ' primary': '');
 const fosterLabel = cat.status === 'trial'? '🏠 トライアル中': '🏠 里親になる';
 const catLink = RESCUCAT_URL + '?cat=' + cat.id;
 return `<div class="grid grid-cols-3 gap-2">
-<a class="${cls('supplies')}" href="${NEKONOTE_WISHLIST}" target="_blank" rel="noopener">📦 物資で支援</a>
-<a class="${cls('money')}" href="${catLink}&action=tip" target="_blank" rel="noopener">💰 支援金</a>
+<a class="${cls('supplies')}" href="${wishlistFor(cat.id, null)}" target="_blank" rel="noopener">📦 物資で支援</a>
+<a class="${cls('money')}" href="${catLink}" target="_blank" rel="noopener">💰 支援金</a>
 <a class="${cls('foster')}" href="${catLink}" target="_blank" rel="noopener">${fosterLabel}</a></div>`;
 }
 function progressHtml(cat) {
@@ -359,7 +360,7 @@ ${img? `<img src="${esc(img)}" alt="" class="w-full aspect-[4/3] object-cover mt
 ${rows}
 ${first.description? `<p class="text-[.82rem] text-stone-500 leading-relaxed mt-1">${esc(first.description)}</p>`: ''}
 ${p.cat? `<div class="flex items-center gap-3 mt-3">${followBtnHtml(p.cat)}${shareBtnsHtml(p.cat, p.org)}</div>`: ''}
-<div class="mt-3"><a class="exit-btn primary w-full" href="${NEKONOTE_WISHLIST}" target="_blank" rel="noopener">📦 Nekonoteで物資を送る</a></div>
+<div class="mt-3"><a class="exit-btn primary w-full" href="${wishlistFor(p.cat ? p.cat.id : null, p.org ? p.org.id : null)}" target="_blank" rel="noopener">📦 Nekonoteで物資を送る</a></div>
 </div></article>`;
 }
 if (p.type === 'update') {
@@ -420,7 +421,7 @@ ${info.map(([k, v]) => `<p class="text-[.82rem]"><span class="font-bold text-sto
 </article>
 ${myItems.length? `<div class="card mt-4 p-4"><p class="font-black mb-2">📦 この子への物資募集</p>
 ${myItems.map(i => `<p class="text-[.86rem] py-1 border-b border-orange-50 last:border-0">${esc(i.title)} <span class="text-stone-400 text-[.76rem]">${i.current_quantity || 0}/${i.target_quantity || 0}個</span></p>`).join('')}
-<a class="exit-btn primary w-full mt-3" href="${NEKONOTE_WISHLIST}" target="_blank" rel="noopener">📦 Nekonoteで物資を送る</a></div>`: ''}
+<a class="exit-btn primary w-full mt-3" href="${wishlistFor(cat.id, null)}" target="_blank" rel="noopener">📦 Nekonoteで物資を送る</a></div>`: ''}
 ${myUpdates.length || myThanks.length? `<div class="mt-4 space-y-4">
 ${myUpdates.map(u => postCardHtml({ type: 'update', time: u.created_at, update: u, cat, org})).join('')}
 ${myThanks.map(t => postCardHtml({ type: 'thanks', time: t.created_at, log: t, cat, org})).join('')}</div>`: ''}`;
@@ -440,7 +441,7 @@ document.getElementById('view-org').innerHTML = `
 <p class="text-[.76rem] text-stone-400">保護団体</p></div>
 </div>
 <div class="grid grid-cols-2 gap-2 mt-4">
-<a class="exit-btn" href="${NEKONOTE_WISHLIST}" target="_blank" rel="noopener">📦 物資で支援</a>
+<a class="exit-btn" href="${wishlistFor(null, org.id)}" target="_blank" rel="noopener">📦 物資で支援</a>
 <a class="exit-btn" href="${RESCUCAT_URL}" target="_blank" rel="noopener">💰 支援金・里親</a>
 </div>
 ${org.delivery_type === 'wishlist' && org.amazon_wishlist_url? `<a class="exit-btn w-full mt-2" href="${esc(org.amazon_wishlist_url)}" target="_blank" rel="noopener">🎁 Amazonほしい物リスト</a>`: ''}
